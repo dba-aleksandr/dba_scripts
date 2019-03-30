@@ -1,0 +1,166 @@
+USE [master]
+GO
+
+/****** Object:  Table [dbo].[svn_hp]    Script Date: 07/28/2016 10:36:02 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[svn_hp](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[UserName] [nvarchar](128) NULL,
+	[ServerName] [nvarchar](100) NULL,
+	[InDateTime] [datetime] NULL,
+	[Event] [nvarchar](100) NULL,
+	[Object] [nvarchar](100) NULL,
+	[SchemaName] [nvarchar](100) NULL,
+	[DatabaseName] [nvarchar](100) NULL,
+	[sql] [nvarchar](max) NULL,
+	[IsNotified] [bit] NOT NULL
+
+	
+ CONSTRAINT [PK_yourTable] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+
+ALTER TABLE [dbo].[svn_hp] ADD  CONSTRAINT [DF_svn_hp_UserName]  DEFAULT (suser_sname()) FOR [UserName]
+GO
+
+ALTER TABLE [dbo].[svn_hp] ADD  CONSTRAINT [DF_svn_hp_dt]  DEFAULT (getdate()) FOR [InDateTime]
+GO
+
+ALTER TABLE [dbo].[svn_hp] ADD  DEFAULT ((0)) FOR [IsNotified]
+GO
+
+USE [master]
+GO
+
+/****** Object:  StoredProcedure [dbo].[audit_ddl]    Script Date: 07/28/2016 10:33:34 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- =============================================
+-- Create date: 2015-10-15
+-- Description:	
+-- =============================================
+CREATE PROCEDURE [dbo].[audit_ddl]
+	@Filter NVARCHAR(256) = NULL
+AS
+BEGIN
+	SET NOCOUNT ON;
+
+	DECLARE @Recipients VARCHAR(512) = 'Gubatenko.A@tts.ru'
+
+	SET @Filter = '%' + @Filter + '%';
+
+    IF EXISTS (
+    	SELECT	NULL
+    	FROM	dbo.svn_hp st
+    	WHERE	st.IsNotified = 0
+    		AND (@Filter IS NULL OR st.[Event] LIKE @Filter)
+    )
+    BEGIN
+    		
+    	DECLARE	@Body NVARCHAR(MAX);
+    		
+    	SET @Body = (
+			SELECT	arow.val + CHAR(10) AS 'data()'
+			FROM	dbo.svn_hp st
+			CROSS APPLY (
+				SELECT	ISNULL(spl.val, '') + ';' AS 'data()'
+				FROM	(
+					VALUES
+						(st.UserName),
+						(CONVERT(NVARCHAR, st.InDateTime, 126)),
+						(st.[Event]),
+						(st.SchemaName),
+						(st.[Object])	
+				) AS spl(val)
+				FOR XML PATH('')
+			) AS arow(val)
+			WHERE	st.IsNotified = 0
+				AND (@Filter IS NULL OR st.[Event] LIKE @Filter)
+			ORDER BY st.ID
+			FOR XML PATH('')
+    	);
+    		
+    	EXEC msdb.dbo.sp_send_dbmail
+    			@profile_name = 'Admin Mailer',
+				@recipients = @Recipients,
+				@subject = 'Audit DDL',
+				@body = @Body,
+				@body_format = 'TEXT';
+    		
+    	UPDATE	dbo.svn_hp
+    	SET		IsNotified = 1
+    	WHERE	IsNotified = 0
+    		AND (@Filter IS NULL OR [Event] LIKE @Filter)
+    END
+    
+END
+
+GO
+
+
+USE [W1]
+GO
+
+/****** Object:  DdlTrigger [ddl_trig_database]    Script Date: 07/28/2016 10:55:03 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE TRIGGER [ddl_trig_database] 
+ON all server
+FOR DDL_SERVER_SECURITY_EVENTS,        
+       DDL_DATABASE_SECURITY_EVENTS,
+	   alter_database, create_database,drop_database,DDL_Table_events
+AS 
+	set nocount on
+	--SET QUOTED_IDENTIFIER ON;
+	declare @data xml = eventdata()
+	insert svn_hp ([Event],[ServerName],[DatabaseName] , [Object], [SchemaName],[sql])
+  select
+		@data.value('(/EVENT_INSTANCE/EventType)[1]','nvarchar(128)'),
+		@data.value('(/EVENT_INSTANCE/ServerName)[1]','nvarchar(100)'),
+		@data.value('(/EVENT_INSTANCE/DatabaseName)[1]','nvarchar(100)'),
+		@data.value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)'),
+		@data.value('(/EVENT_INSTANCE/SchemaName)[1]', 'nvarchar(100)'),
+		@data.value('(/EVENT_INSTANCE/TSQLCommand)[1]','nvarchar(max)')
+		
+
+
+
+
+
+
+GO
+
+SET ANSI_NULLS on
+GO
+
+SET QUOTED_IDENTIFIER on
+GO
+
+/*DISABLE TRIGGER [ddl_trig_database] ON DATABASE
+GO
+
+ENABLE TRIGGER [ddl_trig_database] ON DATABASE
+GO*/
+
+
