@@ -1,0 +1,2 @@
+
+last("perf_counter[\"\MSSQL$DBPROD6:Databases(tempdb)\Data File(s) Size (KB)\"]")-last("perf_counter[\"\MSSQL$DBPROD6:Transactions\Free Space in tempdb (KB)\"]")/1.28
