@@ -1,0 +1,30 @@
+
+--ПОИСК АКТИВНЫХ ТРАНЗАКЦИЙ
+USE
+[tempdb]
+go
+declare
+@spid nvarchar(10)
+
+if object_id('master..OpenTranStatus') is not null
+drop table master.dbo.OpenTranStatus
+-- Create the temporary table to accept the results.  
+CREATE TABLE master.dbo.OpenTranStatus (  
+   ActiveTransaction varchar(25),  
+   Details sql_variant   
+   );  
+-- Execute the command, putting the results in the table.  
+INSERT INTO master.dbo.OpenTranStatus   
+   EXEC ('DBCC OPENTRAN WITH TABLERESULTS, NO_INFOMSGS');  
+
+-- Display the results.  
+SELECT * FROM master.dbo.OpenTranStatus;
+set @spid= (select  CONVERT(NVARCHAR(10),Details) from master.dbo.OpenTranStatus where ActiveTransaction='OLDACT_SPID')
+--drop table  #OpenTranStatus
+exec sp_WhoIsActive
+@filter_type = 'session', 
+@filter=@spid,
+@show_sleeping_spids = 2,  -- Показать спящие сессии
+@show_system_spids = 1, -- Показать системные сессии
+@get_plans = 1
+GO 
