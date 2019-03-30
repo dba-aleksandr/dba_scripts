@@ -1,0 +1,3 @@
+нужно скачать винтернете SchemaZen.exe   
+EXEC xp_cmdshell 'C:\tmp\SchemaZen.exe script --server localhost --database c82_alpha_auto_ufa_zhuk --scriptDir c:\temp\s.sql -o'
+EXEC xp_cmdshell 'C:\tmp\SchemaZen.exe create --server localhost --database c82_alpha_auto_ufa_zhuk_test --scriptDir c:\temp\s.sql -f c:\temp\ -o'
