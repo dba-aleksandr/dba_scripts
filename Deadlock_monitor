@@ -1,0 +1,130 @@
+--алерт руками создавать джоб ид неверный, добавить предупреждение в письмо галка в алерте есть
+EXEC master..sp_altermessage 1205, 'WITH_LOG', TRUE;--обработка ошибки взаимоблокировка сервером
+GO
+
+USE [msdb]
+GO
+
+/****** Object:  Job [Deadlock Job]    Script Date: 19.12.2016 14:21:11 ******/
+EXEC msdb.dbo.sp_delete_job @job_id=N'76b5c991-e242-4a97-9dd5-dd6a86b0eef9', @delete_unused_schedule=1
+GO
+
+/****** Object:  Job [Deadlock Job]    Script Date: 19.12.2016 14:21:11 ******/
+BEGIN TRANSACTION
+DECLARE @ReturnCode INT
+SELECT @ReturnCode = 0
+/****** Object:  JobCategory [[Uncategorized (Local)]]    Script Date: 19.12.2016 14:21:11 ******/
+IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'[Uncategorized (Local)]' AND category_class=1)
+BEGIN
+EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'[Uncategorized (Local)]'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+END
+
+DECLARE @jobId BINARY(16)
+EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'Deadlock Job', 
+		@enabled=1, 
+		@notify_level_eventlog=0, 
+		@notify_level_email=0, 
+		@notify_level_netsend=0, 
+		@notify_level_page=0, 
+		@delete_level=0, 
+		@description=N'No description available.', 
+		@category_name=N'[Uncategorized (Local)]', 
+		@owner_login_name=N'sa', @job_id = @jobId OUTPUT
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+/****** Object:  Step [Deadlock has occurred.]    Script Date: 19.12.2016 14:21:11 ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Deadlock has occurred.', 
+		@step_id=1, 
+		@cmdexec_success_code=0, 
+		@on_success_action=1, 
+		@on_success_step_id=0, 
+		@on_fail_action=2, 
+		@on_fail_step_id=0, 
+		@retry_attempts=0, 
+		@retry_interval=0, 
+		@os_run_priority=0, @subsystem=N'TSQL', 
+		@command=N'--== This is for SQL 2005 and higher. ==--
+--== We will create a temporary table to hold the error log detail. ==--
+--== Before we create the temporary table, we make sure it does not already exist. ==--
+ IF OBJECT_ID(''tempdb.dbo.ErrorLog'') IS Not Null
+ BEGIN
+ DROP TABLE tempdb.dbo.ErrorLog
+ END
+ --== We have checked for the existence of the temporary table and dropped it if it was there. ==--
+ --== Now, we can create the table called tempdb.dbo.ErrorLog ==--
+CREATE TABLE tempdb.dbo.ErrorLog (Id int IDENTITY (1, 1) NOT NULL, 
+logdate DATETIME, procInfo VARCHAR(10), ERRORLOG VARCHAR(MAX))
+--== We create a 3 column table to hold the contents of the SQL Server Error log. ==--
+--== Then we insert the actual data from the Error log into our newly created table. ==--
+ INSERT INTO tempdb.dbo.ErrorLog
+ EXEC master.dbo.sp_readerrorlog
+--== With our table created and populated, we can now use the info inside of it. ==--
+ BEGIN
+--== Set a variable to get our instance name. ==--
+--== We do this so the email we receive makes more sense. ==--
+ declare @servername nvarchar(150)
+ set @servername = @@servername
+--== We set another variable to create a subject line for the email. ==-- 
+ declare @mysubject nvarchar(200)
+ set @mysubject = ''ВЗАИМОБЛОКИРОВКА ОБНАРУЖЕНА НА ''+@servername+''.''
+ --== Now we will prepare and send the email. Change the email address to suite your environment. ==-- 
+ EXEC msdb.dbo.sp_send_dbmail @recipients=''Gubatenko.A@tts.ru;Nynkov.G@tts.ru;Martynov.V@tts.ru;Badertdinova.R@tts.ru;Gatin.V@tts.ru'',
+ @subject = @mysubject,
+ @body = ''Сведения о взаимоблокировки: граф блокировки приложен.'',
+ @query = ''select logdate, procInfo, ERRORLOG from tempdb.dbo.ErrorLog where Id >= (select TOP 1 Id from tempdb.dbo.ErrorLog WHERE ERRORLOG Like ''''%Deadlock encountered%'''' order by Id DESC)'',
+ @query_result_width = 600,
+ @attach_query_result_as_file = 1
+ END
+ --== Clean up our process by dropping our temporary table. ==--
+ DROP TABLE tempdb.dbo.ErrorLog
+', 
+		@database_name=N'master', 
+		@flags=0
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+COMMIT TRANSACTION
+GOTO EndSave
+QuitWithRollback:
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+EndSave:
+
+GO
+USE [msdb]
+GO
+
+/****** Object:  Operator [sql]    Script Date: 20.12.2016 17:20:30 ******/
+EXEC msdb.dbo.sp_delete_operator @name=N'sql'
+GO
+
+
+
+USE [msdb]
+GO
+EXEC msdb.dbo.sp_add_operator @name=N'sql', 
+		@enabled=1, 
+		@pager_days=0, 
+		@email_address=N'sql@tts.ru;', 
+		@netsend_address=N'sql@tts.ru'
+GO
+EXEC msdb.dbo.sp_add_notification @alert_name=N'1205 - Deadlock Detected', @operator_name=N'sql', @notification_method = 1
+GO
+
+USE [msdb]
+GO
+
+/****** Object:  Alert [1205 - Deadlock Detected]    Script Date: 16.10.2018 8:00:42 ******/
+EXEC msdb.dbo.sp_add_alert @name=N'1205 - Deadlock Detected', 
+		@message_id=1205, 
+		@severity=0, 
+		@enabled=1, 
+		@delay_between_responses=60, 
+		@include_event_description_in=1, 
+		@category_name=N'[Uncategorized]', 
+		@job_name=N'Deadlock Job'
+GO
+
+
