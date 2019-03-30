@@ -1,0 +1,19 @@
+USE [W14325]
+
+DECLARE	@RowCountToDelete INT = 100000;
+	
+DECLARE @RowCount INT = 1;
+	
+WHILE @RowCount > 0
+BEGIN
+		
+	DELETE TOP (@RowCountToDelete)
+		Reporting.Registry
+	WHERE	CreateDate < '2015-01-01';
+
+	SET @RowCount = @@ROWCOUNT;
+
+	RAISERROR('Loop', 0, 1) WITH NOWAIT;
+
+	WAITFOR DELAY '00:00:02';	
+END
