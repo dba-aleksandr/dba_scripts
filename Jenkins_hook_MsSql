@@ -1,0 +1,4 @@
+--Нужен curl windows
+BEGIN TRANSACTION;  
+EXEC xp_cmdshell 'P:\curl\bin\curl -u a.gubatenko@centrozaim.local:122f3bd1e7a8c084994168de1f993026 -X POST http://ci1-main.centrozaim.local/job/TB/job/reset_1c_tb_copy/build?token=B7A7ED2DD2B34D948D08F96CD6B940CF'
+commit;
